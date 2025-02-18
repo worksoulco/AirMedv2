@@ -62,7 +62,7 @@ const supportContacts = [
   }
 ];
 
-export function HelpPage() {
+function HelpPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedQuestion, setExpandedQuestion] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -191,3 +191,5 @@ export function HelpPage() {
     </div>
   );
 }
+
+export default HelpPage;

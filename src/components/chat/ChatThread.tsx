@@ -1,75 +1,45 @@
 import { useState, useEffect, useRef } from 'react';
-import { Send, Paperclip, Image as ImageIcon, File, X, Clock, CheckCircle2 } from 'lucide-react';
+import { Send, Paperclip, File, X, Clock, CheckCircle2, AlertCircle } from 'lucide-react';
 import { Button } from '../ui/button';
-import { supabase } from '@/lib/supabase/client';
-import { getCurrentUser } from '@/lib/auth';
-
-interface ChatParticipant {
-  id: string;
-  name: string;
-  photo?: string;
-  role: 'patient' | 'provider';
-}
+import { useAuth } from '@/hooks/useAuth';
+import { loadMessages, sendMessage, uploadAttachment, markMessagesAsRead } from '@/lib/chat';
+import type { ChatMessage, ChatParticipant } from '@/types/chat';
 
 interface ChatThreadProps {
   threadId: string;
   participant: ChatParticipant;
 }
 
-interface Message {
-  id: string;
-  sender_id: string;
-  content: string;
-  created_at: string;
-  read_at?: string;
-  attachments?: {
-    id: string;
-    type: string;
-    url: string;
-    name: string;
-  }[];
-}
-
 export function ChatThread({ threadId, participant }: ChatThreadProps) {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [attachments, setAttachments] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const user = getCurrentUser();
+  const { user } = useAuth();
 
-  // Load messages
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center p-4">
+        <div className="text-center">
+          <AlertCircle className="mx-auto h-12 w-12 text-red-500" />
+          <h3 className="mt-2 font-medium text-gray-900">Authentication Error</h3>
+          <p className="mt-1 text-sm text-gray-500">Please log in to access chat.</p>
+        </div>
+      </div>
+    );
+  }
+
   useEffect(() => {
-    const loadMessages = async () => {
+    const fetchMessages = async () => {
       try {
-        const { data, error } = await supabase
-          .from('chat_messages')
-          .select(`
-            id,
-            sender_id,
-            content,
-            created_at,
-            read_at,
-            attachments (
-              id,
-              name,
-              type,
-              url
-            )
-          `)
-          .eq('thread_id', threadId)
-          .order('created_at', { ascending: true });
-
-        if (error) throw error;
-        setMessages(data || []);
+        const messages = await loadMessages(threadId);
+        setMessages(messages);
 
         // Mark messages as read
-        if (data?.some(m => m.sender_id !== user?.id && !m.read_at)) {
-          await supabase.rpc('mark_messages_read', {
-            p_thread_id: threadId,
-            p_user_id: user?.id
-          });
+        if (messages.some(m => m.sender_id !== user.id && !m.read_at)) {
+          await markMessagesAsRead(threadId, user.id);
         }
       } catch (err) {
         console.error('Error loading messages:', err);
@@ -77,43 +47,8 @@ export function ChatThread({ threadId, participant }: ChatThreadProps) {
       }
     };
 
-    loadMessages();
-
-    // Subscribe to new messages
-    const subscription = supabase
-      .channel(`thread:${threadId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'chat_messages',
-          filter: `thread_id=eq.${threadId}`
-        },
-        (payload) => {
-          if (payload.new) {
-            setMessages(prev => {
-              const exists = prev.some(m => m.id === payload.new.id);
-              if (exists) return prev;
-              return [...prev, payload.new as Message];
-            });
-
-            // Mark message as read if from other user
-            if (payload.new.sender_id !== user?.id) {
-              supabase.rpc('mark_messages_read', {
-                p_thread_id: threadId,
-                p_user_id: user?.id
-              }).catch(console.error);
-            }
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, [threadId, user?.id]);
+    fetchMessages();
+  }, [threadId, user.id]);
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -121,62 +56,31 @@ export function ChatThread({ threadId, participant }: ChatThreadProps) {
   }, [messages]);
 
   const handleSendMessage = async () => {
-    if (!user?.id || (!newMessage.trim() && attachments.length === 0)) return;
+    if (!newMessage.trim() && attachments.length === 0) return;
 
     try {
       setError(null);
       const content = newMessage.trim();
       setNewMessage('');
 
-      // First insert the message
-      const { data: message, error: messageError } = await supabase
-        .from('chat_messages')
-        .insert({
-          thread_id: threadId,
-          sender_id: user.id,
-          content
-        })
-        .select()
-        .single();
+      // Send the message
+      const message = await sendMessage(threadId, user.id, content);
+      if (!message) throw new Error('Failed to send message');
 
-      if (messageError) throw messageError;
-
-      // Then handle attachments if any
+      // Handle attachments if any
       if (attachments.length > 0) {
-        const attachmentPromises = attachments.map(async file => {
-          const fileExt = file.name.split('.').pop();
-          const filePath = `${threadId}/${message.id}/${Date.now()}.${fileExt}`;
-
-          const { error: uploadError } = await supabase.storage
-            .from('chat-attachments')
-            .upload(filePath, file);
-
-          if (uploadError) throw uploadError;
-
-          const { data: { publicUrl } } = supabase.storage
-            .from('chat-attachments')
-            .getPublicUrl(filePath);
-
-          return {
-            message_id: message.id,
-            name: file.name,
-            type: file.type,
-            url: publicUrl,
-            size: file.size
-          };
-        });
-
-        const { error: attachmentError } = await supabase
-          .from('chat_attachments')
-          .insert(await Promise.all(attachmentPromises));
-
-        if (attachmentError) throw attachmentError;
+        setIsUploading(true);
+        const uploadPromises = attachments.map(file => 
+          uploadAttachment(threadId, message.id, file)
+        );
+        await Promise.all(uploadPromises);
+        setAttachments([]);
       }
-
-      setAttachments([]);
     } catch (err) {
       console.error('Error sending message:', err);
       setError(err instanceof Error ? err.message : 'Failed to send message');
+    } finally {
+      setIsUploading(false);
     }
   };
 

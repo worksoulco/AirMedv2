@@ -1,28 +1,36 @@
+export interface ChatThread {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  participants?: ChatParticipant[];
+}
+
+export interface ChatParticipantInfo {
+  id: string;
+  thread_id: string;
+  user_id: string;
+  role: 'patient' | 'provider';
+  created_at: string;
+}
+
 export interface ChatMessage {
   id: string;
-  senderId: string;
-  receiverId: string;
+  thread_id: string;
+  sender_id: string;
   content: string;
-  timestamp: string;
-  read: boolean;
+  created_at: string;
+  read_at?: string;
   attachments?: ChatAttachment[];
 }
 
 export interface ChatAttachment {
   id: string;
-  type: 'image' | 'document';
-  url: string;
+  message_id: string;
   name: string;
+  type: string;
+  url: string;
   size: number;
-  mimeType: string;
-}
-
-export interface ChatThread {
-  id: string;
-  participants: string[];
-  lastMessage?: ChatMessage;
-  unreadCount: number;
-  updatedAt: string;
+  created_at: string;
 }
 
 export interface ChatParticipant {
@@ -30,6 +38,4 @@ export interface ChatParticipant {
   name: string;
   photo?: string;
   role: 'patient' | 'provider';
-  lastSeen?: string;
-  typing?: boolean;
 }

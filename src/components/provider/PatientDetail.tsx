@@ -19,7 +19,7 @@ interface PatientDetailProps {
   onUpdatePatient: (patient: Patient) => void;
 }
 
-export function PatientDetail({ patient, onUpdatePatient }: PatientDetailProps) {
+function PatientDetail({ patient, onUpdatePatient }: PatientDetailProps) {
   // Ensure patient has protocols array
   const patientWithProtocols = {
     ...patient,
@@ -298,3 +298,5 @@ export function PatientDetail({ patient, onUpdatePatient }: PatientDetailProps) 
     </div>
   );
 }
+
+export default PatientDetail;

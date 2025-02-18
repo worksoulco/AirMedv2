@@ -5,7 +5,7 @@ import { loadProviderData } from '@/lib/provider';
 import { Patient } from '@/types/provider';
 import { ChatThread } from './ChatThread';
 
-export function MessagingPage() {
+function MessagingPage() {
   const [provider, setProvider] = useState(loadProviderData());
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -187,3 +187,5 @@ export function MessagingPage() {
     </div>
   );
 }
+
+export default MessagingPage;

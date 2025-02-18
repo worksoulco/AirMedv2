@@ -40,38 +40,46 @@ export function LoginPage() {
     checkConnection();
   }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (loading) return;
+
     try {
       setError(null);
       setLoading(true);
 
       if (!dbConnected) {
-        throw new Error('Database not connected. Please click "Connect to Supabase" to set up your connection.');
+        throw new Error('Database connection error. Please click "Connect to Supabase" to set up your connection.');
       }
 
-      if (!email.trim() || !password.trim()) {
+      const trimmedEmail = email.trim();
+      const trimmedPassword = password.trim();
+
+      if (!trimmedEmail || !trimmedPassword) {
         throw new Error('Please enter your email and password');
       }
 
       let user;
       if (isSignUp) {
-        if (!name.trim()) {
+        const trimmedName = name.trim();
+        const trimmedTitle = title.trim();
+
+        if (!trimmedName) {
           throw new Error('Please enter your name');
         }
-        if (role === 'provider' && !title.trim()) {
+        if (role === 'provider' && !trimmedTitle) {
           throw new Error('Please enter your title');
         }
 
-        user = await signUp(email, password, {
-          name: name.trim(),
+        user = await signUp(trimmedEmail, trimmedPassword, {
+          name: trimmedName,
           role,
-          title: title.trim()
+          title: trimmedTitle
         });
       } else {
-        user = await login(email, password);
+        user = await login(trimmedEmail, trimmedPassword);
       }
-      
+
       // Validate the login was successful
       if (!user || !user.id) {
         throw new Error('Authentication failed - invalid user data');
@@ -160,7 +168,10 @@ export function LoginPage() {
               <input
                 type="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setError(null);
+                  setEmail(e.target.value.trim());
+                }}
                 className="mt-1 block w-full rounded-lg border-gray-200 text-sm focus:border-primary focus:ring-1 focus:ring-primary"
                 placeholder="Enter your email"
                 required
@@ -176,7 +187,10 @@ export function LoginPage() {
                 <input
                   type="password"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) => {
+                    setError(null);
+                    setPassword(e.target.value);
+                  }}
                   onFocus={() => isSignUp && setShowPasswordRequirements(true)}
                   onBlur={() => setShowPasswordRequirements(false)}
                   className="mt-1 block w-full rounded-lg border-gray-200 text-sm focus:border-primary focus:ring-1 focus:ring-primary"

@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '../ui/button';
-import { ProfileMenu } from '../profile/profile-menu';
+import ProfileMenu from '../profile/profile-menu';
 import { DailyCheckInModal } from '../modals/daily-check-in';
 import { QuickMealModal } from '../modals/quick-meal';
 
@@ -53,10 +53,12 @@ const providerNavigation = [
   { name: 'Messages', href: '/provider/messages', icon: MessageSquare },
 ];
 
+import type { AuthUser } from '@/hooks/useAuth';
+
 interface TopNavProps {
   onMenuClick: () => void;
   onLogout: () => void;
-  user: any;
+  user: AuthUser;
 }
 
 export function TopNav({ onMenuClick, onLogout, user }: TopNavProps) {
@@ -77,8 +79,8 @@ export function TopNav({ onMenuClick, onLogout, user }: TopNavProps) {
         >
           <Menu className="h-6 w-6" />
         </button>
-        
-        <div className="absolute left-1/2 -translate-x-1/2">
+
+        <div className="flex-1 flex justify-center">
           <AppLogo />
         </div>
 
@@ -89,7 +91,7 @@ export function TopNav({ onMenuClick, onLogout, user }: TopNavProps) {
             className="rounded-full"
             onClick={() => setShowUserMenu(!showUserMenu)}
           >
-            {user?.userData?.photo ? (
+            {user.userData.photo ? (
               <img
                 src={user.userData.photo}
                 alt={user.userData.name}
@@ -98,7 +100,7 @@ export function TopNav({ onMenuClick, onLogout, user }: TopNavProps) {
             ) : (
               <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
                 <span className="text-sm font-medium text-primary">
-                  {user?.userData?.name?.charAt(0)}
+                  {user.userData.name.charAt(0)}
                 </span>
               </div>
             )}
@@ -115,7 +117,7 @@ export function TopNav({ onMenuClick, onLogout, user }: TopNavProps) {
   );
 }
 
-export function BottomNav({ user }: { user: any }) {
+export function BottomNav({ user }: { user: AuthUser }) {
   const location = useLocation();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showMealModal, setShowMealModal] = useState(false);

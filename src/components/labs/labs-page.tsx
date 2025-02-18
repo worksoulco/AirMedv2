@@ -1,19 +1,21 @@
-import { useState, useEffect } from 'react';
-import { Activity, ChevronRight, FileText, Plus, Search, Filter } from 'lucide-react';
+import { useState, useEffect, lazy } from 'react';
+import { Activity, ChevronRight, FileText, Plus, Search, Filter, ExternalLink } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '../ui/button';
-import { PDFScanner } from './pdf-scanner';
-import { BiomarkerData } from '@/types/provider';
-import { loadLabs, subscribeToLabUpdates } from '@/lib/labs';
+import { LazyComponent } from '../common/LazyComponent';
+const PDFScanner = lazy(() => import('./pdf-scanner'));
+import { LabReportSystem } from './lab-report-system';
+import type { LabReport, LabSection, LabResult, LabReportData } from '@/types/labs';
+import { loadLabReports, subscribeToLabUpdates, saveLabReport } from '@/lib/labs';
 import { getCurrentUser } from '@/lib/auth';
 
-export function LabsPage() {
+function LabsPage() {
   const [showScanner, setShowScanner] = useState(false);
   const [showAddMenu, setShowAddMenu] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [categories, setCategories] = useState<string[]>([]);
-  const [biomarkers, setBiomarkers] = useState<BiomarkerData[]>([]);
+  const [reports, setReports] = useState<LabReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -24,11 +26,15 @@ export function LabsPage() {
     const loadData = async () => {
       try {
         setLoading(true);
-        const data = await loadLabs(user?.id || '');
-        setBiomarkers(data);
+        const data = await loadLabReports(user?.id || '');
+        setReports(data);
         
-        // Extract unique categories
-        const uniqueCategories = Array.from(new Set(data.map(b => b.category))).sort();
+        // Extract unique categories from all sections
+        const uniqueCategories = Array.from(new Set(
+          data.flatMap(report => 
+            report.sections.map(section => section.name)
+          )
+        )).sort();
         setCategories(uniqueCategories);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load lab results');
@@ -52,22 +58,36 @@ export function LabsPage() {
     };
   }, [user?.id]);
 
-  const handleScanComplete = async (results: BiomarkerData[]) => {
+  const handleScanComplete = async (reportData: LabReportData, file: File) => {
     try {
-      // Results will be automatically saved through the lab service
-      setBiomarkers(prev => [...results, ...prev]);
+      // Save results and PDF to Supabase
+      await saveLabReport(reportData, file);
       setShowScanner(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save lab results');
     }
   };
 
-  // Filter biomarkers based on search and category
-  const filteredBiomarkers = biomarkers.filter(biomarker => {
-    const matchesSearch = biomarker.name.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCategory = selectedCategory === 'all' || biomarker.category === selectedCategory;
-    return matchesSearch && matchesCategory;
-  });
+  // Filter sections based on search and category
+  const filteredSections = reports.flatMap(report => 
+    report.sections.filter(section => {
+      const matchesCategory = selectedCategory === 'all' || section.name === selectedCategory;
+      if (!matchesCategory) return false;
+
+      if (section.type === 'text') {
+        return section.content?.toLowerCase().includes(searchQuery.toLowerCase());
+      }
+
+      return section.results?.some(result =>
+        result.testName.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }).map(section => ({
+      ...section,
+      reportId: report.id,
+      reportDate: report.collectionDate,
+      pdfUrl: report.pdfUrl
+    }))
+  );
 
   if (loading) {
     return (
@@ -82,7 +102,7 @@ export function LabsPage() {
 
   return (
     <div className="min-h-screen space-y-6 px-4 py-6">
-      <div className="mx-auto max-w-3xl">
+      <div className="mx-auto max-w-6xl">
         <div className="mb-8 flex items-center justify-between">
           <div>
             <h1 className="font-serif text-3xl">Lab Results</h1>
@@ -136,7 +156,7 @@ export function LabsPage() {
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
             <input
               type="text"
-              placeholder="Search biomarkers..."
+              placeholder="Search lab results..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full rounded-lg border-gray-200 pl-10 text-sm focus:border-primary focus:ring-1 focus:ring-primary"
@@ -177,7 +197,9 @@ export function LabsPage() {
               </div>
             </div>
             <div className="space-y-4">
-              <PDFScanner onScanComplete={handleScanComplete} />
+              <LazyComponent>
+                <PDFScanner onScanComplete={handleScanComplete} />
+              </LazyComponent>
               <Button
                 variant="outline"
                 onClick={() => setShowScanner(false)}
@@ -195,70 +217,33 @@ export function LabsPage() {
           </div>
         )}
 
-        {/* Biomarkers List */}
+        {/* Lab Results */}
         <div className="space-y-6">
-          {Object.entries(
-            filteredBiomarkers.reduce((acc, biomarker) => {
-              if (!acc[biomarker.category]) {
-                acc[biomarker.category] = [];
-              }
-              acc[biomarker.category].push(biomarker);
-              return acc;
-            }, {} as Record<string, BiomarkerData[]>)
-          ).map(([category, markers]) => (
-            <div key={category} className="space-y-4">
-              <h2 className="text-lg font-semibold text-gray-900">{category}</h2>
-              <div className="grid gap-4">
-                {markers.map((biomarker) => (
-                  <div
-                    key={`${biomarker.name}-${biomarker.date}`}
-                    className="rounded-lg bg-white p-4 shadow-sm transition-shadow hover:shadow-md"
+          {filteredSections.map((section) => (
+            <div key={`${section.reportId}-${section.id}`}>
+              <LabReportSystem 
+                onParseComplete={() => {}} // Not used in render mode
+                key={`${section.reportId}-${section.id}`}
+              >
+                {({ renderSection }) => renderSection(section.name, section)}
+              </LabReportSystem>
+              {section.pdfUrl && (
+                <div className="mt-2 flex justify-end">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => window.open(section.pdfUrl, '_blank')}
+                    className="text-xs"
                   >
-                    <div className="mb-2 flex items-center justify-between">
-                      <h3 className="font-medium text-gray-900">{biomarker.name}</h3>
-                      <div className={`rounded-full px-2 py-1 text-xs font-medium ${
-                        biomarker.status === 'normal' ? 'bg-green-100 text-green-700' :
-                        biomarker.status === 'high' ? 'bg-red-100 text-red-700' :
-                        'bg-yellow-100 text-yellow-700'
-                      }`}>
-                        {biomarker.status.charAt(0).toUpperCase() + biomarker.status.slice(1)}
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-1">
-                        <p className="text-2xl font-semibold text-gray-900">
-                          {biomarker.value} <span className="text-sm text-gray-500">{biomarker.unit}</span>
-                        </p>
-                        <p className="text-sm text-gray-500">
-                          Range: {biomarker.referenceRange} {biomarker.unit}
-                        </p>
-                      </div>
-                      <div className={`h-full w-1 rounded-full ${
-                        biomarker.status === 'normal' ? 'bg-green-500' :
-                        biomarker.status === 'high' ? 'bg-red-500' :
-                        'bg-yellow-500'
-                      }`} />
-                    </div>
-                    {biomarker.metadata && (
-                      <div className="mt-2 text-xs text-gray-500">
-                        {biomarker.metadata.method && (
-                          <p>Method: {biomarker.metadata.method}</p>
-                        )}
-                        {biomarker.metadata.performer && (
-                          <p>Performed by: {biomarker.metadata.performer}</p>
-                        )}
-                      </div>
-                    )}
-                    <p className="mt-2 text-xs text-gray-500">
-                      {new Date(biomarker.date).toLocaleDateString()}
-                    </p>
-                  </div>
-                ))}
-              </div>
+                    <ExternalLink className="mr-1 h-3 w-3" />
+                    View Full Report
+                  </Button>
+                </div>
+              )}
             </div>
           ))}
 
-          {filteredBiomarkers.length === 0 && (
+          {filteredSections.length === 0 && (
             <div className="rounded-xl bg-white p-8 text-center">
               <FileText className="mx-auto h-12 w-12 text-gray-400" />
               <h3 className="mt-2 font-medium text-gray-900">No lab results found</h3>
@@ -280,3 +265,5 @@ export function LabsPage() {
     </div>
   );
 }
+
+export default LabsPage;

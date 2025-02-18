@@ -4,7 +4,7 @@ import { Button } from '../ui/button';
 import { WellnessTrends } from '../dashboard/wellness-trends';
 import { Link } from 'react-router-dom';
 
-export function AnalyticsPage() {
+function AnalyticsPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -91,3 +91,5 @@ export function AnalyticsPage() {
     </div>
   );
 }
+
+export default AnalyticsPage;

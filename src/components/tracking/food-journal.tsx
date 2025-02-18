@@ -12,7 +12,7 @@ const mealTypeEmoji = {
   snack: '🍎',
 } as const;
 
-export function FoodJournal() {
+function FoodJournal() {
   const [meals, setMeals] = useState<MealData[]>([]);
   const [showMealModal, setShowMealModal] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -270,3 +270,5 @@ export function FoodJournal() {
     </div>
   );
 }
+
+export default FoodJournal;

@@ -5,7 +5,7 @@ import { getCurrentUser } from '@/lib/auth';
 import { getPatientProtocols, subscribeToProtocolUpdates } from '@/lib/supabase/protocols';
 import type { Protocol } from '@/types/protocol';
 
-export function ProtocolHistory() {
+function ProtocolHistory() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStatus, setSelectedStatus] = useState<Protocol['status'] | 'all'>('all');
   const [expandedProtocol, setExpandedProtocol] = useState<string | null>(null);
@@ -303,3 +303,5 @@ export function ProtocolHistory() {
     </div>
   );
 }
+
+export default ProtocolHistory;

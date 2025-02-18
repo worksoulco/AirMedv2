@@ -6,7 +6,7 @@ import { loadProviderData, addClinicalNote } from '@/lib/provider';
 
 type NoteFilter = 'all' | 'visit' | 'lab' | 'prescription' | 'other';
 
-export function NotesPage() {
+function NotesPage() {
   const [notes, setNotes] = useState<ClinicalNote[]>([]);
   const [showNewNote, setShowNewNote] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -378,3 +378,5 @@ export function NotesPage() {
     </div>
   );
 }
+
+export default NotesPage;

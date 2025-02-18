@@ -2,9 +2,9 @@ import { useState, useEffect } from 'react';
 import { User, Mail, Phone, Calendar, MapPin, Shield, Edit2, Plus, Save, X, AlertCircle, RefreshCw } from 'lucide-react';
 import { Button } from '../ui/button';
 import { supabase } from '@/lib/supabase/client';
-import { getCurrentUser } from '@/lib/auth';
+import { useAuth } from '@/hooks/useAuth';
 
-export function ProfilePage() {
+function ProfilePage() {
   const [profile, setProfile] = useState<any | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -13,7 +13,7 @@ export function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
 
-  const user = getCurrentUser();
+  const { user } = useAuth();
 
   useEffect(() => {
     if (!user?.id) return;
@@ -478,3 +478,5 @@ export function ProfilePage() {
     </div>
   );
 }
+
+export default ProfilePage;

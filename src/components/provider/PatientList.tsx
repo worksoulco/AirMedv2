@@ -11,7 +11,7 @@ interface PatientListProps {
   onInvitePatient: () => void;
 }
 
-export function PatientList({ patients, onInvitePatient }: PatientListProps) {
+function PatientList({ patients, onInvitePatient }: PatientListProps) {
   const location = useLocation();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'attention' | 'checkins'>(
@@ -180,3 +180,5 @@ export function PatientList({ patients, onInvitePatient }: PatientListProps) {
     </div>
   );
 }
+
+export default PatientList;

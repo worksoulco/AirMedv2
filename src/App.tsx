@@ -1,59 +1,85 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useParams } from 'react-router-dom';
+import type { Patient } from './types/patient';
+import type { AuthUser } from './hooks/useAuth';
 import { TopNav, BottomNav } from './components/layout/navigation';
 import { SideMenu } from './components/layout/side-menu';
-import { Dashboard } from './components/dashboard/Dashboard';
-import { TrackingPage } from './components/tracking/tracking-page';
-import { ProviderDashboard } from './components/provider/ProviderDashboard';
-import { PatientList } from './components/provider/PatientList';
-import { PatientDetail } from './components/provider/PatientDetail';
-import { NotesPage } from './components/provider/NotesPage';
-import { MessagingPage } from './components/provider/messaging/MessagingPage';
-import { InvitePatientModal } from './components/provider/InvitePatientModal';
 import { LoginPage } from './components/auth/LoginPage';
 import { PrivateRoute } from './components/auth/PrivateRoute';
+import { LazyComponent } from './components/common/LazyComponent';
 import { getCurrentUser, logout } from './lib/auth';
+import { setupLabResultsTable } from './lib/supabase/setup';
 import { loadProviderData, initializeMockData } from './lib/provider';
-import { FoodJournal } from './components/tracking/food-journal';
-import { AnalyticsPage } from './components/analytics/analytics-page';
-import { LabsPage } from './components/labs/labs-page';
-import { ChatPage } from './components/chat/chat-page';
-import { ProtocolHistory } from './components/protocols/protocol-history';
-import { ProfilePage } from './components/profile/profile-page';
-import { SettingsPage } from './components/profile/settings-page';
-import { HelpPage } from './components/help/help-page';
+
+// Lazy load major feature chunks
+// Core features
+const Dashboard = lazy(() => import('@/components/dashboard/Dashboard'));
+const TrackingPage = lazy(() => import(/* webpackChunkName: "tracking" */ '@/components/tracking/tracking-page'));
+const FoodJournal = lazy(() => import(/* webpackChunkName: "tracking" */ '@/components/tracking/food-journal'));
+const AnalyticsPage = lazy(() => import(/* webpackChunkName: "analytics" */ '@/components/analytics/analytics-page'));
+const LabsPage = lazy(() => import(/* webpackChunkName: "labs" */ '@/components/labs/labs-page'));
+const ChatPage = lazy(() => import(/* webpackChunkName: "chat" */ '@/components/chat/chat-page'));
+const ProtocolHistory = lazy(() => import(/* webpackChunkName: "protocols" */ '@/components/protocols/protocol-history'));
+
+// Profile and Settings chunk
+const ProfileFeatures = {
+  ProfilePage: lazy(() => import(/* webpackChunkName: "profile" */ '@/components/profile/profile-page')),
+  SettingsPage: lazy(() => import(/* webpackChunkName: "profile" */ '@/components/profile/settings-page')),
+  HelpPage: lazy(() => import(/* webpackChunkName: "profile" */ '@/components/help/help-page'))
+};
+
+// Provider features chunk
+const ProviderFeatures = {
+  Dashboard: lazy(() => import(/* webpackChunkName: "provider" */ '@/components/provider/ProviderDashboard')),
+  PatientList: lazy(() => import(/* webpackChunkName: "provider" */ '@/components/provider/PatientList')),
+  PatientDetail: lazy(() => import(/* webpackChunkName: "provider" */ '@/components/provider/PatientDetail')),
+  NotesPage: lazy(() => import(/* webpackChunkName: "provider" */ '@/components/provider/NotesPage')),
+  MessagingPage: lazy(() => import(/* webpackChunkName: "provider" */ '@/components/provider/messaging/MessagingPage')),
+  InvitePatientModal: lazy(() => import(/* webpackChunkName: "provider" */ '@/components/provider/InvitePatientModal'))
+};
 
 // Wrapper component to handle patient data fetching
-function PatientDetailWrapper() {
+const PatientDetailWrapper = () => {
   const { id } = useParams();
   const provider = loadProviderData();
-  const patient = provider?.patients.find(p => p.id === id);
+  const patient = provider?.patients.find((p) => p.id === id);
 
   if (!patient) {
     return <Navigate to="/provider/patients" replace />;
   }
 
-  const handleUpdatePatient = (updatedPatient: any) => {
+  const handleUpdatePatient = (updatedPatient: Patient) => {
     // Handle patient updates
   };
 
   return (
-    <PatientDetail
-      patient={patient}
-      onUpdatePatient={handleUpdatePatient}
-    />
+    <LazyComponent>
+      <ProviderFeatures.PatientDetail
+        patient={patient}
+        onUpdatePatient={handleUpdatePatient}
+      />
+    </LazyComponent>
   );
-}
+};
 
 function App() {
   const [isSideMenuOpen, setIsSideMenuOpen] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
-  const [user, setUser] = useState(getCurrentUser());
+  const [user, setUser] = useState<AuthUser | null>(getCurrentUser());
   const [providerData, setProviderData] = useState(loadProviderData());
 
   useEffect(() => {
-    // Initialize mock data if needed
-    initializeMockData();
+    // Initialize mock data and database tables
+    const initialize = async () => {
+      try {
+        initializeMockData();
+        await setupLabResultsTable();
+      } catch (error) {
+        console.error('Initialization error:', error);
+      }
+    };
+    
+    initialize();
 
     const handleAuthUpdate = () => {
       const currentUser = getCurrentUser();
@@ -103,7 +129,9 @@ function App() {
               path="/"
               element={
                 <PrivateRoute allowedRole="patient">
-                  <Dashboard />
+                  <LazyComponent>
+                    <Dashboard />
+                  </LazyComponent>
                 </PrivateRoute>
               }
             />
@@ -111,7 +139,9 @@ function App() {
               path="/tracking"
               element={
                 <PrivateRoute allowedRole="patient">
-                  <TrackingPage />
+                  <LazyComponent>
+                    <TrackingPage />
+                  </LazyComponent>
                 </PrivateRoute>
               }
             />
@@ -119,7 +149,9 @@ function App() {
               path="/food-journal"
               element={
                 <PrivateRoute allowedRole="patient">
-                  <FoodJournal />
+                  <LazyComponent>
+                    <FoodJournal />
+                  </LazyComponent>
                 </PrivateRoute>
               }
             />
@@ -127,7 +159,9 @@ function App() {
               path="/analytics"
               element={
                 <PrivateRoute allowedRole="patient">
-                  <AnalyticsPage />
+                  <LazyComponent>
+                    <AnalyticsPage />
+                  </LazyComponent>
                 </PrivateRoute>
               }
             />
@@ -135,7 +169,9 @@ function App() {
               path="/labs"
               element={
                 <PrivateRoute allowedRole="patient">
-                  <LabsPage />
+                  <LazyComponent>
+                    <LabsPage />
+                  </LazyComponent>
                 </PrivateRoute>
               }
             />
@@ -143,7 +179,9 @@ function App() {
               path="/messages"
               element={
                 <PrivateRoute allowedRole="patient">
-                  <ChatPage />
+                  <LazyComponent>
+                    <ChatPage />
+                  </LazyComponent>
                 </PrivateRoute>
               }
             />
@@ -151,7 +189,9 @@ function App() {
               path="/protocols"
               element={
                 <PrivateRoute allowedRole="patient">
-                  <ProtocolHistory />
+                  <LazyComponent>
+                    <ProtocolHistory />
+                  </LazyComponent>
                 </PrivateRoute>
               }
             />
@@ -159,7 +199,9 @@ function App() {
               path="/profile"
               element={
                 <PrivateRoute allowedRole="patient">
-                  <ProfilePage />
+                  <LazyComponent>
+                    <ProfileFeatures.ProfilePage />
+                  </LazyComponent>
                 </PrivateRoute>
               }
             />
@@ -167,7 +209,9 @@ function App() {
               path="/settings"
               element={
                 <PrivateRoute allowedRole="patient">
-                  <SettingsPage />
+                  <LazyComponent>
+                    <ProfileFeatures.SettingsPage />
+                  </LazyComponent>
                 </PrivateRoute>
               }
             />
@@ -175,7 +219,9 @@ function App() {
               path="/help"
               element={
                 <PrivateRoute allowedRole="patient">
-                  <HelpPage />
+                  <LazyComponent>
+                    <ProfileFeatures.HelpPage />
+                  </LazyComponent>
                 </PrivateRoute>
               }
             />
@@ -185,7 +231,9 @@ function App() {
               path="/provider"
               element={
                 <PrivateRoute allowedRole="provider">
-                  <ProviderDashboard />
+                  <LazyComponent>
+                    <ProviderFeatures.Dashboard />
+                  </LazyComponent>
                 </PrivateRoute>
               }
             />
@@ -193,15 +241,17 @@ function App() {
               path="/provider/patients"
               element={
                 <PrivateRoute allowedRole="provider">
-                  <>
-                    <PatientList
-                      patients={providerData?.patients || []}
-                      onInvitePatient={() => setShowInviteModal(true)}
-                    />
-                    {showInviteModal && (
-                      <InvitePatientModal onClose={() => setShowInviteModal(false)} />
-                    )}
-                  </>
+                  <LazyComponent>
+                    <>
+                      <ProviderFeatures.PatientList
+                        patients={providerData?.patients || []}
+                        onInvitePatient={() => setShowInviteModal(true)}
+                      />
+                      {showInviteModal && (
+                        <ProviderFeatures.InvitePatientModal onClose={() => setShowInviteModal(false)} />
+                      )}
+                    </>
+                  </LazyComponent>
                 </PrivateRoute>
               }
             />
@@ -217,7 +267,9 @@ function App() {
               path="/provider/notes"
               element={
                 <PrivateRoute allowedRole="provider">
-                  <NotesPage />
+                  <LazyComponent>
+                    <ProviderFeatures.NotesPage />
+                  </LazyComponent>
                 </PrivateRoute>
               }
             />
@@ -225,7 +277,9 @@ function App() {
               path="/provider/messages"
               element={
                 <PrivateRoute allowedRole="provider">
-                  <MessagingPage />
+                  <LazyComponent>
+                    <ProviderFeatures.MessagingPage />
+                  </LazyComponent>
                 </PrivateRoute>
               }
             />
@@ -233,7 +287,9 @@ function App() {
               path="/provider/profile"
               element={
                 <PrivateRoute allowedRole="provider">
-                  <ProfilePage />
+                  <LazyComponent>
+                    <ProfileFeatures.ProfilePage />
+                  </LazyComponent>
                 </PrivateRoute>
               }
             />
@@ -241,7 +297,9 @@ function App() {
               path="/provider/settings"
               element={
                 <PrivateRoute allowedRole="provider">
-                  <SettingsPage />
+                  <LazyComponent>
+                    <ProfileFeatures.SettingsPage />
+                  </LazyComponent>
                 </PrivateRoute>
               }
             />
@@ -249,8 +307,22 @@ function App() {
               path="/provider/help"
               element={
                 <PrivateRoute allowedRole="provider">
-                  <HelpPage />
+                  <LazyComponent>
+                    <ProfileFeatures.HelpPage />
+                  </LazyComponent>
                 </PrivateRoute>
+              }
+            />
+
+            {/* Catch-all route - redirect to appropriate dashboard based on role */}
+            <Route
+              path="*"
+              element={
+                user.role === 'provider' ? (
+                  <Navigate to="/provider" replace />
+                ) : (
+                  <Navigate to="/" replace />
+                )
               }
             />
           </Routes>

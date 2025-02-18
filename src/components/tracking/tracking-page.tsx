@@ -1,6 +1,6 @@
 import { HabitTracker } from './habit-tracker';
 
-export function TrackingPage() {
+function TrackingPage() {
   return (
     <div className="min-h-screen px-4 py-6">
       <div className="mx-auto max-w-2xl">
@@ -18,3 +18,5 @@ export function TrackingPage() {
     </div>
   );
 }
+
+export default TrackingPage;

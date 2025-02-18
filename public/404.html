@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Redirecting...</title>
+    <script>
+      // Get the current path excluding the base URL
+      const segment = window.location.pathname + window.location.search + window.location.hash;
+      
+      // Redirect to the index.html with the current path
+      window.location.href = '/' + (segment.charAt(0) === '/' ? segment.slice(1) : segment);
+    </script>
+  </head>
+  <body>
+    Redirecting...
+  </body>
+</html>

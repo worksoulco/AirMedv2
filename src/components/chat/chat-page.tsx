@@ -1,18 +1,39 @@
 import { useState, useEffect } from 'react';
 import { MessageSquare, AlertCircle, RefreshCw } from 'lucide-react';
 import { Button } from '../ui/button';
+import ConnectProviderModal from '../patient/ConnectProviderModal';
 import { ChatThread } from './ChatThread';
+import { useAuth } from '@/hooks/useAuth';
+import { getOrCreateChatThread, subscribeToMessages } from '@/lib/chat';
 import { supabase } from '@/lib/supabase/client';
-import { getCurrentUser } from '@/lib/auth';
+import type { ChatParticipant } from '@/types/chat';
 
-export function ChatPage() {
+interface Provider {
+  id: string;
+  name: string;
+  email: string;
+  photo_url?: string;
+  provider_details: {
+    title: string;
+    specialties: string[];
+    npi: string;
+    facility: {
+      name: string;
+      address: string;
+      phone: string;
+    };
+  };
+}
+
+export default function ChatPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [thread, setThread] = useState<any | null>(null);
-  const [provider, setProvider] = useState<any | null>(null);
+  const [thread, setThread] = useState<string | null>(null);
+  const [provider, setProvider] = useState<Provider | null>(null);
+  const [showConnectModal, setShowConnectModal] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
 
-  const user = getCurrentUser();
+  const { user } = useAuth();
 
   useEffect(() => {
     if (!user?.id) return;
@@ -23,41 +44,105 @@ export function ChatPage() {
         setError(null);
 
         if (user.role === 'patient') {
-          // Get patient's provider
-          const { data: providers, error: providerError } = await supabase
-            .from('patient_providers')
+          // Get patient's chat thread and provider
+          type ThreadResponse = {
+            thread_id: string;
+            provider: {
+              user: {
+                id: string;
+                raw_user_meta_data: {
+                  name: string;
+                  email: string;
+                  photo_url?: string;
+                };
+                provider_details: Array<{
+                  title: string;
+                  specialties: string[];
+                  npi: string;
+                  facility: {
+                    name: string;
+                    address: string;
+                    phone: string;
+                  };
+                }>;
+              };
+            };
+          };
+
+          // First get the patient's thread
+          const { data: threadData, error: threadError } = await supabase
+            .from('chat_participants')
+            .select('thread_id')
+            .eq('user_id', user.id)
+            .eq('role', 'patient')
+            .single();
+
+          if (threadError) {
+            if (threadError.code === 'PGRST116') {
+              // No thread found
+              setProvider(null);
+              setThread(null);
+              setLoading(false);
+              return;
+            }
+            throw threadError;
+          }
+
+          type ProviderResponse = {
+            user: {
+              id: string;
+              raw_user_meta_data: {
+                name: string;
+                email: string;
+                photo_url?: string;
+              };
+              provider_details: Array<{
+                title: string;
+                specialties: string[];
+                npi: string;
+                facility: {
+                  name: string;
+                  address: string;
+                  phone: string;
+                };
+              }>;
+            };
+          };
+
+          // Then get the provider from the same thread
+          const { data: providerData, error: providerError } = await supabase
+            .from('chat_participants')
             .select(`
-              provider:provider_id (
+              user:users!user_id (
                 id,
-                name,
-                email,
-                photo_url,
+                raw_user_meta_data,
                 provider_details (*)
               )
             `)
-            .eq('patient_id', user.id)
-            .eq('status', 'active');
+            .eq('thread_id', threadData.thread_id)
+            .eq('role', 'provider')
+            .single() as { data: ProviderResponse | null; error: any };
 
           if (providerError) throw providerError;
 
-          if (!providers || providers.length === 0) {
+          if (!providerData?.user) {
             setProvider(null);
+            setThread(null);
             setLoading(false);
             return;
           }
 
-          const provider = providers[0].provider;
-          setProvider(provider);
+          const providerInfo: Provider = {
+            id: providerData.user.id,
+            name: providerData.user.raw_user_meta_data.name,
+            email: providerData.user.raw_user_meta_data.email,
+            photo_url: providerData.user.raw_user_meta_data.photo_url,
+            provider_details: providerData.user.provider_details[0]
+          };
 
-          // Get or create chat thread
-          const { data: threadId, error: threadError } = await supabase
-            .rpc('get_or_create_chat_thread', {
-              p_patient_id: user.id,
-              p_provider_id: provider.id
-            });
+          setProvider(providerInfo);
+          setThread(threadData.thread_id);
 
-          if (threadError) throw threadError;
-          setThread(threadId);
         } else {
           // For providers, they should select a patient first
           setThread(null);
@@ -73,28 +158,23 @@ export function ChatPage() {
     loadData();
 
     // Subscribe to real-time updates
-    const threadSubscription = supabase
-      .channel('chat_updates')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'chat_messages',
-          filter: user.role === 'patient'
-            ? `thread_id=eq.${thread}`
-            : undefined
-        },
+    if (thread) {
+      const subscription = subscribeToMessages(
+        thread,
         () => {
-          // Reload data on any chat updates
+          // Reload data on new messages
           loadData();
+        },
+        (error) => {
+          console.error('Chat subscription error:', error);
+          setError(error.message);
         }
-      )
-      .subscribe();
+      );
 
-    return () => {
-      threadSubscription.unsubscribe();
-    };
+      return () => {
+        subscription.unsubscribe();
+      };
+    }
   }, [user?.id, retryCount]);
 
   const handleRetry = () => {
@@ -146,11 +226,20 @@ export function ChatPage() {
             Connect with your healthcare provider to start messaging
           </p>
           <Button
-            onClick={() => {/* Navigate to provider connection page */}}
+            onClick={() => setShowConnectModal(true)}
             className="mt-4"
           >
-            Find a Provider
+            Connect to Provider
           </Button>
+          {showConnectModal && (
+            <ConnectProviderModal 
+              onClose={() => setShowConnectModal(false)}
+              onSuccess={() => {
+                setShowConnectModal(false);
+                setRetryCount(prev => prev + 1);
+              }}
+            />
+          )}
         </div>
       </div>
     );

@@ -10,7 +10,7 @@ import { getCurrentUser } from '@/lib/auth';
 import { saveCheckIn, getCheckIns } from '@/lib/supabase/checkins';
 import { Activity } from 'lucide-react';
 
-export function Dashboard() {
+function Dashboard() {
   const [showCheckInModal, setShowCheckInModal] = useState(false);
   const [showMealModal, setShowMealModal] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -174,3 +174,5 @@ export function Dashboard() {
     </div>
   );
 }
+
+export default Dashboard;

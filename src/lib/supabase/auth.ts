@@ -167,12 +167,6 @@ export async function loginWithSupabase(email: string, password: string): Promis
       throw new Error('Please enter your email and password');
     }
 
-    // First check database connection
-    const isConnected = await checkSupabaseConnection();
-    if (!isConnected) {
-      throw new Error('Database connection error. Please click "Connect to Supabase" to set up your connection.');
-    }
-
     // Sign in with Supabase auth
     const { data: { user: authUser }, error: authError } = await supabase.auth.signInWithPassword({
       email,

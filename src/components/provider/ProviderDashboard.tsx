@@ -11,22 +11,29 @@ import {
   Bell,
   FileText,
   ChevronRight,
-  Plus
+  Plus,
+  Link as LinkIcon,
+  UserPlus
 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { supabase } from '@/lib/supabase/client';
-import { getCurrentUser } from '@/lib/auth';
+import { useAuth } from '@/hooks/useAuth';
+import InvitePatientModal from './InvitePatientModal';
+import ConnectionRequestsModal from './ConnectionRequestsModal';
+import type { Patient, PatientAlert, HealthMetric } from '@/types/patient';
+import type { PatientProviderResponse, ProviderPatientResponse } from '@/types/supabase';
 
-export function ProviderDashboard() {
+export default function ProviderDashboard() {
   const navigate = useNavigate();
-  const [patients, setPatients] = useState<any[]>([]);
-  const [alerts, setAlerts] = useState<any[]>([]);
-  const [metrics, setMetrics] = useState<any[]>([]);
+  const { user } = useAuth();
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [alerts, setAlerts] = useState<PatientAlert[]>([]);
+  const [metrics, setMetrics] = useState<HealthMetric[]>([]);
   const [appointments, setAppointments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  const user = getCurrentUser();
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [showConnectionRequests, setShowConnectionRequests] = useState(false);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -40,24 +47,31 @@ export function ProviderDashboard() {
         const { data: patientProviders, error: ppError } = await supabase
           .from('patient_providers')
           .select(`
-            patient:patient_id (
+            id,
+            patient:users!patient_id (
               id,
-              name,
-              email,
-              photo_url,
-              metadata
+              raw_user_meta_data->>'name' as name,
+              raw_user_meta_data->>'email' as email,
+              raw_user_meta_data->>'photo_url' as photo_url,
+              raw_user_meta_data as metadata
             )
           `)
           .eq('provider_id', user.id)
-          .eq('status', 'active');
+          .eq('status', 'active') as { data: ProviderPatientResponse[] | null; error: any };
 
         if (ppError) throw ppError;
 
-        const connectedPatients = patientProviders?.map(pp => pp.patient) || [];
+        const connectedPatients = patientProviders?.map(pp => ({
+          id: pp.patient.id,
+          name: pp.patient.name,
+          email: pp.patient.email,
+          photo_url: pp.patient.photo_url,
+          metadata: pp.patient.metadata
+        })) || [];
         setPatients(connectedPatients);
 
         // Get alerts for connected patients
-        const alerts = [];
+        const alerts: PatientAlert[] = [];
         for (const patient of connectedPatients) {
           // Get recent check-ins
           const { data: checkIns } = await supabase
@@ -106,7 +120,7 @@ export function ProviderDashboard() {
         setAlerts(alerts);
 
         // Calculate metrics
-        const metrics = [];
+        const metrics: HealthMetric[] = [];
         let totalCheckIns = 0;
         let totalPatients = connectedPatients.length;
         let patientsWithCheckIns = 0;
@@ -144,7 +158,7 @@ export function ProviderDashboard() {
             metric: 'Patient Engagement',
             value: `${Math.round((patientsWithCheckIns / totalPatients) * 100)}`,
             unit: '%',
-            trend: patientsWithCheckIns > totalPatients / 2 ? 'up' : 'down',
+            trend: patientsWithCheckIns > totalPatients / 2 ? 'up' : 'down' as const,
             change: `${Math.round(totalCheckIns / patientsWithCheckIns)} check-ins/patient`
           });
 
@@ -154,7 +168,7 @@ export function ProviderDashboard() {
             metric: 'Average Mood Score',
             value: (totalMoodScore / totalCheckIns).toFixed(1),
             unit: '/5',
-            trend: (totalMoodScore / totalCheckIns) >= 3.5 ? 'up' : 'down',
+            trend: (totalMoodScore / totalCheckIns) >= 3.5 ? 'up' : 'down' as const,
             change: `${Math.round(((totalMoodScore / totalCheckIns - 3) / 3) * 100)}%`
           });
 
@@ -164,7 +178,7 @@ export function ProviderDashboard() {
             metric: 'Sleep Quality',
             value: (totalSleepScore / totalCheckIns).toFixed(1),
             unit: '/5',
-            trend: (totalSleepScore / totalCheckIns) >= 3.5 ? 'up' : 'down',
+            trend: (totalSleepScore / totalCheckIns) >= 3.5 ? 'up' : 'down' as const,
             change: `${Math.round(((totalSleepScore / totalCheckIns - 3) / 3) * 100)}%`
           });
         }
@@ -198,7 +212,7 @@ export function ProviderDashboard() {
     return () => {
       checkInsSubscription.unsubscribe();
     };
-  }, [user?.id]);
+  }, [user?.id, navigate]);
 
   if (loading) {
     return (
@@ -264,8 +278,29 @@ export function ProviderDashboard() {
       <div className="mx-auto max-w-7xl">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="font-serif text-3xl">Welcome back, {user?.userData.name.split(' ')[0]}</h1>
-          <p className="text-lg text-gray-600">Here's what needs your attention today</p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="font-serif text-3xl">Welcome back, {user?.userData.name.split(' ')[0]}</h1>
+              <p className="text-lg text-gray-600">Here's what needs your attention today</p>
+            </div>
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                onClick={() => setShowConnectionRequests(true)}
+                className="flex items-center gap-2"
+              >
+                <UserPlus className="h-4 w-4" />
+                Connection Requests
+              </Button>
+              <Button
+                onClick={() => setShowInviteModal(true)}
+                className="flex items-center gap-2"
+              >
+                <LinkIcon className="h-4 w-4" />
+                Manage Codes
+              </Button>
+            </div>
+          </div>
         </div>
 
         {/* Quick Stats */}
@@ -435,6 +470,14 @@ export function ProviderDashboard() {
           </div>
         </div>
       </div>
+
+      {/* Modals */}
+      {showInviteModal && (
+        <InvitePatientModal onClose={() => setShowInviteModal(false)} />
+      )}
+      {showConnectionRequests && (
+        <ConnectionRequestsModal onClose={() => setShowConnectionRequests(false)} />
+      )}
     </div>
   );
 }

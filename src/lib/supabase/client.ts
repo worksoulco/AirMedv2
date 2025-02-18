@@ -41,17 +41,14 @@ export async function checkSupabaseConnection(): Promise<boolean> {
       throw authError;
     }
 
-    // Then check database connection with a simple query
+    // Then check database connection by querying profiles table
     const { error: dbError } = await supabase
       .from('profiles')
       .select('id')
-      .limit(1)
-      .single();
+      .limit(1);
 
     if (dbError) {
-      if (dbError.message.includes('does not exist')) {
-        throw new Error('Database tables not found');
-      }
+      console.error('Database error:', dbError);
       throw dbError;
     }
 
