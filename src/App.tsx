@@ -4,8 +4,7 @@ import type { Patient } from './types/patient';
 import type { AuthUser } from './hooks/useAuth';
 import { TopNav, BottomNav } from './components/layout/navigation';
 import { SideMenu } from './components/layout/side-menu';
-import { LoginPage } from './components/auth/LoginPage';
-import { PrivateRoute } from './components/auth/PrivateRoute';
+import { LoginPage, OnboardingFlow, PrivateRoute } from './components/auth';
 import { LazyComponent } from './components/common/LazyComponent';
 import { getCurrentUser, logout } from './lib/auth';
 import { setupLabResultsTable } from './lib/supabase/setup';
@@ -107,6 +106,7 @@ function App() {
       <Router>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/onboarding" element={<OnboardingFlow />} />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </Router>

@@ -85,8 +85,13 @@ export function LoginPage() {
         throw new Error('Authentication failed - invalid user data');
       }
 
-      // Navigate based on role
-      navigate(user.role === 'provider' ? '/provider' : '/');
+      // For new users, redirect to onboarding
+      if (isSignUp) {
+        navigate('/onboarding');
+      } else {
+        // For existing users, navigate based on role
+        navigate(user.role === 'provider' ? '/provider' : '/');
+      }
     } catch (err) {
       console.error('Authentication error:', err);
       setError(err instanceof Error ? err.message : 'Authentication failed');

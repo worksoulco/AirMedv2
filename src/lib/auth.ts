@@ -1,5 +1,5 @@
 import { supabase, checkSupabaseConnection, handleSupabaseError } from './supabase/client';
-import type { AuthUser } from './types/auth';
+import type { AuthUser, ProfileUpdateData } from './types/auth';
 
 // Helper function to validate UUID format
 function isValidUUID(uuid: string | undefined | null): boolean {
@@ -212,4 +212,57 @@ export function isAuthenticated(): boolean {
 export function getUserRole(): 'patient' | 'provider' | null {
   const user = getCurrentUser();
   return user ? user.role : null;
+}
+
+// Update user profile
+export async function updateUserProfile(profileData: ProfileUpdateData): Promise<AuthUser> {
+  try {
+    const currentUser = getCurrentUser();
+    if (!currentUser?.id) {
+      throw new Error('No authenticated user found');
+    }
+
+    // Check database connection
+    const isConnected = await checkSupabaseConnection();
+    if (!isConnected) {
+      throw new Error('Database connection error. Please check your connection.');
+    }
+
+    // Update profile in database
+    const { data: profile, error: updateError } = await supabase
+      .from('profiles')
+      .update({
+        date_of_birth: profileData.date_of_birth,
+        gender: profileData.gender,
+        height: profileData.height,
+        weight: profileData.weight,
+        blood_type: profileData.blood_type,
+        emergency_contact: profileData.emergency_contact
+      })
+      .eq('id', currentUser.id)
+      .select()
+      .single();
+
+    if (updateError) throw updateError;
+    if (!profile) throw new Error('Failed to update profile');
+
+    // Build updated user object
+    const updatedUser: AuthUser = {
+      ...currentUser,
+      userData: profile
+    };
+
+    // Validate and store updated user data
+    if (!validateUserData(updatedUser)) {
+      throw new Error('Invalid user data structure');
+    }
+
+    localStorage.setItem('currentUser', JSON.stringify(updatedUser));
+    window.dispatchEvent(new Event('authUpdate'));
+    
+    return updatedUser;
+  } catch (error) {
+    console.error('Profile update error:', error);
+    throw handleSupabaseError(error);
+  }
 }
