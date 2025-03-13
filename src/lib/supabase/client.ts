@@ -97,7 +97,24 @@ export function handleSupabaseError(error: any): never {
   if (error.message?.includes('Database error querying schema')) {
     throw new Error('Database connection error. Please ensure Supabase is properly connected.');
   }
+  
+  // Handle specific auth errors
+  if (error.message?.includes('Database error saving new user')) {
+    throw new Error('Unable to create your account at this time. Please try again later or contact support.');
+  }
+  if (error.message?.includes('User already registered')) {
+    throw new Error('An account with this email already exists. Please log in instead.');
+  }
+  if (error.message?.includes('Email link is invalid or has expired')) {
+    throw new Error('The email verification link is invalid or has expired. Please request a new one.');
+  }
+  if (error.message?.includes('Email not confirmed')) {
+    throw new Error('Please verify your email address before logging in.');
+  }
+  if (error.message?.includes('Invalid login credentials')) {
+    throw new Error('Invalid email or password. Please try again.');
+  }
 
   // Use error message if available, otherwise generic error
-  throw new Error(error.message || 'An unexpected error occurred');
+  throw new Error(error.message || 'Unexpected failure, please check server logs for more information');
 }

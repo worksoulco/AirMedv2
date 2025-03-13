@@ -124,6 +124,15 @@
 - Message read/write permissions based on thread participation
 - Attachment access controlled by message ownership
 - Chat participant role enforcement
+- Profile access restricted to owner (auth.uid() = id)
+
+## Auth System
+- Trigger on auth.users creates profile automatically
+- Foreign key constraint with ON DELETE CASCADE
+- Email uniqueness enforced with index
+- Proper error handling in trigger function
+- Extensive logging for debugging
+- Permissions granted to authenticated users for profile access
 
 ## Data Types
 - UUID: Primary and foreign keys

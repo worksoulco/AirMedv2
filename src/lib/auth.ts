@@ -1,5 +1,5 @@
 import { supabase, checkSupabaseConnection, handleSupabaseError } from './supabase/client';
-import type { AuthUser, ProfileUpdateData } from './types/auth';
+import type { AuthUser, ProfileUpdateData } from '../types/auth';
 
 // Helper function to validate UUID format
 function isValidUUID(uuid: string | undefined | null): boolean {
@@ -88,18 +88,39 @@ export async function signUp(
     if (signUpError) throw signUpError;
     if (!authUser?.id) throw new Error('Sign up failed - no user data returned');
 
-    // Wait for profile to be created by trigger
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    // Wait for profile to be created by trigger with retries
+    let profile = null;
+    let profileError = null;
+    let attempts = 0;
+    const maxAttempts = 3;
+    const delay = 2000; // 2 seconds between attempts
 
-    // Fetch user profile
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', authUser.id)
-      .single();
+    while (!profile && attempts < maxAttempts) {
+      attempts++;
+      await new Promise(resolve => setTimeout(resolve, delay));
+      
+      const result = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', authUser.id)
+        .single();
+      
+      if (!result.error && result.data) {
+        profile = result.data;
+        break;
+      }
+      
+      profileError = result.error;
+      console.log(`Attempt ${attempts}: Profile fetch failed, retrying...`);
+    }
 
-    if (profileError) throw profileError;
-    if (!profile) throw new Error('User profile not found');
+    if (!profile) {
+      throw new Error(
+        profileError ? 
+        `Failed to create profile: ${profileError.message}` :
+        'Failed to create profile after multiple attempts'
+      );
+    }
 
     // Build user object
     const user: AuthUser = {
@@ -118,10 +139,49 @@ export async function signUp(
     window.dispatchEvent(new Event('authUpdate'));
     
     return user;
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Sign up error:', error);
     localStorage.removeItem('currentUser');
     localStorage.removeItem('supabase.auth.token');
+    
+    // Enhanced error handling for common cases
+    if (error instanceof Error) {
+      if (error.message.includes('Profile already exists')) {
+        throw new Error('An account with this email already exists. Please log in instead.');
+      } else if (error.message.includes('Failed to create profile')) {
+        throw new Error('Failed to set up your account. Please try again or contact support if the problem persists.');
+      } else if (error.message.includes('Invalid user data structure')) {
+        // This can happen if the profile creation succeeded but validation failed
+        // Try to fetch the profile directly
+        try {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('email', email)
+            .single();
+          
+          if (profile) {
+            // Build user object
+            const user: AuthUser = {
+              id: profile.id,
+              email: profile.email,
+              role: profile.role,
+              userData: profile
+            };
+            
+            localStorage.setItem('currentUser', JSON.stringify(user));
+            window.dispatchEvent(new Event('authUpdate'));
+            
+            return user;
+          }
+        } catch (fetchError) {
+          console.error('Error fetching profile after signup:', fetchError);
+        }
+        
+        throw new Error('Account created but profile setup failed. Please try logging in.');
+      }
+    }
+    
     throw handleSupabaseError(error);
   }
 }
@@ -176,7 +236,7 @@ export async function login(email: string, password: string): Promise<AuthUser> 
     window.dispatchEvent(new Event('authUpdate'));
     
     return user;
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Login error:', error);
     localStorage.removeItem('currentUser');
     localStorage.removeItem('supabase.auth.token');
@@ -193,7 +253,7 @@ export async function logout(): Promise<void> {
     localStorage.removeItem('currentUser');
     localStorage.removeItem('supabase.auth.token');
     window.dispatchEvent(new Event('authUpdate'));
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Logout error:', error);
     // Still remove local data even if Supabase logout fails
     localStorage.removeItem('currentUser');
@@ -261,7 +321,7 @@ export async function updateUserProfile(profileData: ProfileUpdateData): Promise
     window.dispatchEvent(new Event('authUpdate'));
     
     return updatedUser;
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Profile update error:', error);
     throw handleSupabaseError(error);
   }
